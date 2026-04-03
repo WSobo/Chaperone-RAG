@@ -1,0 +1,11 @@
+
+conda create -n chaperone_env python=3.10 -y
+conda activate chaperone_env
+# Install JAX with NVIDIA GPU support and LangChain
+pip install "jax[cuda12]" langchain langchain-community beautifulsoup4 chromadb pyyaml
+
+# Install the Latest Build of Gemma4 from the GitHub Repository
+# may be able to pip install in the future, but not currently since its day 2 of the public release of Gemma4
+git clone https://github.com/google-deepmind/gemma.git
+cd gemma
+pip install -e .
