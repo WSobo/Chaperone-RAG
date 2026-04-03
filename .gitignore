@@ -1,0 +1,18 @@
+# Environments
+venv/
+.env
+__pycache__/
+
+# Vector Databases
+chroma_db/
+faiss_index/
+
+# Model Weights (if you download any locally)
+*.bin
+*.pt
+*.safetensors
+*.gguf
+
+# IDEs
+.vscode/
+.idea/
