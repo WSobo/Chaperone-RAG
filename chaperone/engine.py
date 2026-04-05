@@ -55,11 +55,18 @@ class GemmaEngine:
                 cache_dir=CACHE_DIR
             )
 
+            # Identify correct end-of-turn tokens for Gemma format
+            stop_token_ids = [self.tokenizer.eos_token_id]
+            for token in ["<end_of_turn>", "<start_of_turn>"]:
+                if token in self.tokenizer.vocab:
+                    stop_token_ids.append(self.tokenizer.convert_tokens_to_ids(token))
+
             # Keep generation options in one place to avoid pipeline/config conflicts.
             self.model.generation_config.max_new_tokens = max_new_tokens
             self.model.generation_config.do_sample = True
             self.model.generation_config.temperature = 0.1
-            self.model.generation_config.pad_token_id = self.tokenizer.eos_token_id
+            self.model.generation_config.pad_token_id = getattr(self.tokenizer, "pad_token_id", self.tokenizer.eos_token_id)
+            self.model.generation_config.eos_token_id = stop_token_ids
             self.model.generation_config.max_time = max_generation_time
             self.model.generation_config.max_length = None
             
@@ -68,7 +75,8 @@ class GemmaEngine:
                 "text-generation",
                 model=self.model,
                 tokenizer=self.tokenizer,
-                return_full_text=False
+                return_full_text=False,
+                generation_config=self.model.generation_config
             )
             
             # Wrap in LangChain's HuggingFacePipeline

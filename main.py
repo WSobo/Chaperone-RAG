@@ -156,9 +156,13 @@ def main():
                 # Simple prompt injection approach for retrieved context
                 augmented_prompt = f"User Question: {user_question}\n\nRelevant Context from DB:\n{relevant_ctx}"
             
-            response = engine.chat(augmented_prompt, forced_persona=persona)
-            console.print("\n[bold blue]--- CHAPERONE ---[/bold blue]")
-            console.print(response)
+            try:
+                response = engine.chat(augmented_prompt, forced_persona=persona)
+                console.print("\n[bold blue]--- CHAPERONE ---[/bold blue]")
+                console.print(response)
+            except KeyboardInterrupt:
+                console.print("\n\n[dim yellow][Generation Aborted by User - Returning to prompt][/dim yellow]")
+            
             last_persona = persona
             if persona == "friendly_chatter" and not persona_override:
                 chat_mode_turns = max(chat_mode_turns, 3)
