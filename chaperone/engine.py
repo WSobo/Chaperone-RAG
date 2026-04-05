@@ -71,12 +71,13 @@ class GemmaEngine:
             self.model.generation_config.max_length = None
             
             # Create standard HuggingFace pipeline for text generation
+            # Note: Do not pass generation_config along to pipeline constructor, as the pipeline wrapper
+            # automatically extracts it from the model instance and passing it directly causes a conflict
             pipe = pipeline(
                 "text-generation",
                 model=self.model,
                 tokenizer=self.tokenizer,
-                return_full_text=False,
-                generation_config=self.model.generation_config
+                return_full_text=False
             )
             
             # Wrap in LangChain's HuggingFacePipeline
