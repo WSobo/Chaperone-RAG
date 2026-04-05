@@ -16,3 +16,7 @@ faiss_index/
 # IDEs
 .vscode/
 .idea/
+
+#LLM
+gemma/
+model_cache/
