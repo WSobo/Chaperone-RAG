@@ -58,31 +58,38 @@ class GemmaEngine:
             # Identify correct end-of-turn tokens for Gemma format
             stop_token_ids = [self.tokenizer.eos_token_id]
             
-            # The t.vocab dict doesn't actually contain Gemma 4 special tokens; 
-            # converting special tokens directly via convert_tokens_to_ids is the correct approach
+            # Convert special tokens directly via convert_tokens_to_ids
             for token in ["<end_of_turn>", "<start_of_turn>", "<eos>"]:
                 cid = self.tokenizer.convert_tokens_to_ids(token)
-                # Some versions of transformers return an unk_token id if it fails to find the token
-                if cid and cid != self.tokenizer.unk_token_id and cid not in stop_token_ids:
+                if cid and cid != getattr(self.tokenizer, "unk_token_id", None) and cid not in stop_token_ids:
                     stop_token_ids.append(cid)
 
-            # Keep generation options in one place to avoid pipeline/config conflicts.
-            self.model.generation_config.max_new_tokens = max_new_tokens
-            self.model.generation_config.do_sample = True
-            self.model.generation_config.temperature = 0.1
-            self.model.generation_config.pad_token_id = getattr(self.tokenizer, "pad_token_id", self.tokenizer.eos_token_id)
-            self.model.generation_config.eos_token_id = stop_token_ids
-            self.model.generation_config.max_time = max_generation_time
-            self.model.generation_config.max_length = None
+            # Do not mutate the model's underlying generation_config, as that creates
+            # conflicts when wrapping with LangChain HuggingFacePipeline.
+            # Instead, we will pass explicit parameters to pipeline() which 
+            # passes them safely to generate().
+            pipeline_kwargs = {
+                "max_new_tokens": max_new_tokens,
+                "max_time": max_generation_time,
+                "pad_token_id": getattr(self.tokenizer, "pad_token_id", self.tokenizer.eos_token_id),
+                "eos_token_id": stop_token_ids,
+                "do_sample": True,
+                "temperature": 0.1,
+                "max_length": None,  # Suppress the max_length duplicate warning
+            }
+
+            from transformers import TextStreamer
+            # Enable instant text streaming to the terminal
+            self.streamer = TextStreamer(self.tokenizer, skip_prompt=True, skip_special_tokens=True)
             
             # Create standard HuggingFace pipeline for text generation
-            # Note: Do not pass generation_config along to pipeline constructor, as the pipeline wrapper
-            # automatically extracts it from the model instance and passing it directly causes a conflict
             pipe = pipeline(
                 "text-generation",
                 model=self.model,
                 tokenizer=self.tokenizer,
-                return_full_text=False
+                return_full_text=False,
+                streamer=self.streamer,
+                **pipeline_kwargs
             )
             
             # Wrap in LangChain's HuggingFacePipeline
