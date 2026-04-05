@@ -1,6 +1,8 @@
 import yaml
 import sys
 import argparse
+import time
+import re
 from rich.console import Console
 from rich.panel import Panel
 from chaperone.engine import GemmaEngine
@@ -8,6 +10,12 @@ from chaperone.memory import RAGMemory
 from chaperone.utils.logger import logger
 
 console = Console()
+
+
+def _is_brief_follow_up(text: str) -> bool:
+    """Returns True for short chat-like follow-ups (e.g. 'good hbu')."""
+    tokens = re.findall(r"[a-zA-Z0-9']+", text.lower())
+    return 0 < len(tokens) <= 5
 
 def print_welcome():
     welcome_text = """[bold cyan]╔══════════════════════════════════════════════════╗
@@ -56,8 +64,11 @@ def main():
     logger.info("System setup complete. Chaperone Agent is ready for commands.")
     console.print("\n[bold green]Chaperone is ready. Type your biological questions below.[/bold green]")
     console.print("[dim]Tip: /personas to list personas, /persona <name> to pin one, /persona auto to reset.[/dim]")
+    console.print("[dim]Tip: /chat to lock casual mode for a few turns, /work to unlock.[/dim]")
 
     persona_override = None
+    last_persona = None
+    chat_mode_turns = 0
 
     if args.test:
         test_query = "What is RFdiffusion?"
@@ -103,10 +114,34 @@ def main():
                     continue
 
                 if command == "/help":
-                    console.print("[cyan]Commands:[/cyan] /personas, /persona <name>, /persona auto, exit")
+                    console.print("[cyan]Commands:[/cyan] /personas, /persona <name>, /persona auto, /chat, /work, exit")
                     continue
 
-            persona = persona_override if persona_override else engine.router.route_intent(user_question)
+                if command == "/chat":
+                    chat_mode_turns = 8
+                    console.print("[cyan]Chat mode locked for the next 8 turns (or until domain work is requested).[/cyan]")
+                    continue
+
+                if command == "/work":
+                    chat_mode_turns = 0
+                    console.print("[cyan]Work mode enabled. Persona routing is now fully task-driven.[/cyan]")
+                    continue
+
+            if persona_override:
+                persona = persona_override
+            elif chat_mode_turns > 0 and not engine.router.has_domain_signal(user_question):
+                logger.info(f"Sticky chat mode active ({chat_mode_turns} turn(s) remaining).")
+                persona = "friendly_chatter"
+                chat_mode_turns = max(0, chat_mode_turns - 1)
+            elif last_persona == "friendly_chatter" and _is_brief_follow_up(user_question):
+                logger.info("Keeping friendly_chatter for brief conversational follow-up.")
+                persona = "friendly_chatter"
+            else:
+                persona = engine.router.route_intent(user_question)
+
+            if persona == "default_assistant" and engine.router.is_small_talk(user_question):
+                logger.info("Small-talk detected; switching to friendly_chatter for faster response.")
+                persona = "friendly_chatter"
             if persona_override:
                 logger.info(f"Using pinned persona override: [bold cyan]{persona}[/bold cyan]")
             if persona == "friendly_chatter":
@@ -114,7 +149,9 @@ def main():
                 augmented_prompt = user_question
             else:
                 logger.info("Thinking... searching RAG context...")
+                t0 = time.time()
                 relevant_ctx = memory.search_context(user_question)
+                logger.info(f"RAG retrieval complete in {time.time() - t0:.2f}s")
 
                 # Simple prompt injection approach for retrieved context
                 augmented_prompt = f"User Question: {user_question}\n\nRelevant Context from DB:\n{relevant_ctx}"
@@ -122,6 +159,11 @@ def main():
             response = engine.chat(augmented_prompt, forced_persona=persona)
             console.print("\n[bold blue]--- CHAPERONE ---[/bold blue]")
             console.print(response)
+            last_persona = persona
+            if persona == "friendly_chatter" and not persona_override:
+                chat_mode_turns = max(chat_mode_turns, 3)
+            elif persona != "friendly_chatter" and chat_mode_turns > 0:
+                chat_mode_turns = max(0, chat_mode_turns - 1)
 
         except (KeyboardInterrupt, EOFError):
              logger.info("Interrupt received. Shutting down...")

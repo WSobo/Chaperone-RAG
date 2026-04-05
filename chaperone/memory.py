@@ -1,6 +1,13 @@
 from langchain_community.document_loaders import WebBaseLoader, PyPDFDirectoryLoader
-from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings.huggingface import HuggingFaceEmbeddings
+try:
+    from langchain_chroma import Chroma
+except ImportError:
+    from langchain_community.vectorstores import Chroma
+
+try:
+    from langchain_huggingface import HuggingFaceEmbeddings
+except ImportError:
+    from langchain_community.embeddings.huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from chaperone.utils.logger import logger
 from typing import List

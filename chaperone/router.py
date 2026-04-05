@@ -154,9 +154,144 @@ class AgentProfileRegistry:
         scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
         best_keyword_score, _, best_profile = scored[0]
 
+        # Favor friendly chatter when conversational intent clearly outweighs domain intent.
+        if self._should_prefer_friendly(prompt_lower) and "friendly_chatter" in self.profiles:
+            return self.profiles["friendly_chatter"]
+
         if best_keyword_score <= 0:
             return self.profiles["default_assistant"]
         return best_profile
+
+    def _should_prefer_friendly(self, prompt_lower: str) -> bool:
+        """Decides whether conversational intent is stronger than specialist-domain intent."""
+        domain_score = self._domain_signal_score(prompt_lower)
+        convo_score = self._conversation_score(prompt_lower)
+
+        if domain_score <= 0 and convo_score >= 2:
+            return True
+
+        return convo_score >= domain_score + 2
+
+    def _conversation_score(self, prompt_lower: str) -> int:
+        """Generalized conversation scoring for short social prompts."""
+        score = 0
+
+        social_patterns = (
+            r"\bhow are you\b",
+            r"\bhow r you\b",
+            r"\bhow about you\b",
+            r"\bhow'?s it going\b",
+            r"\bwhat'?s it like\b",
+            r"\bnice to meet you\b",
+            r"\bcasual\b",
+            r"\blet'?s keep it casual\b",
+            r"\bcasual conversation\b",
+            r"\bgood (morning|afternoon|evening|night)\b",
+            r"\bgood\s+hbu\b",
+            r"\bgood\s+wbu\b",
+            r"\bhbu\b",
+            r"\bwbu\b",
+            r"\bsup\b",
+            r"\bwhat'?s up\b",
+            r"\bdo you like\b",
+            r"\bwhat do you think about\b",
+            r"\b(chat|chatting|conversation)\b",
+            r"\bpick a conversation\b",
+            r"\bthat wasn'?t\b",
+            r"\byou said\b",
+            r"\bquick biology fun fact\b",
+            r"\bumm\b",
+            r"\bthanks?\b",
+            r"\bthank you\b",
+            r"\bwho are you\b",
+            r"\btell me about yourself\b",
+            r"\bbeing gemma\b",
+            r"^\s*[1-3](\)|\.)?\s*$",
+            r"^\s*gemma(\s+\d+)?\s*\??\s*$",
+        )
+
+        if any(re.search(pattern, prompt_lower) for pattern in social_patterns):
+            score += 2
+
+        # General conversational question pattern (less brittle than hardcoded examples).
+        if re.search(r"\b(do|did|can|could|would|will|are|were|have|has)\s+you\b", prompt_lower):
+            score += 2
+
+        # Keep very short social-like turns in chat mode (e.g., "good hbu", "lol", "nice").
+        tokens = re.findall(r"[a-zA-Z0-9']+", prompt_lower)
+        if 0 < len(tokens) <= 4:
+            casual_tokens = {
+                "good",
+                "great",
+                "fine",
+                "okay",
+                "ok",
+                "hbu",
+                "wbu",
+                "lol",
+                "nice",
+                "cool",
+                "yep",
+                "yeah",
+                "nah",
+            }
+            if any(token in casual_tokens for token in tokens):
+                score += 2
+
+        # Lightweight conversational score fallback.
+        if "?" in prompt_lower:
+            score += 1
+        if len(tokens) <= 12:
+            score += 1
+        if re.search(r"\b(i|you|we|my|me)\b", prompt_lower):
+            score += 1
+        if re.search(r"\b(hey|hi|hello|yo|lol|haha|casual|chat)\b", prompt_lower):
+            score += 1
+        return score
+
+    def _looks_like_small_talk(self, prompt_lower: str) -> bool:
+        """Backward-compatible helper used by other modules."""
+        if self._has_domain_signal(prompt_lower):
+            return False
+        return self._conversation_score(prompt_lower) >= 3
+
+    def _has_domain_signal(self, prompt_lower: str) -> bool:
+        """Detects specialist-domain intent using dynamic profile keywords plus core biology terms."""
+        return self._domain_signal_score(prompt_lower) > 0
+
+    def _domain_signal_score(self, prompt_lower: str) -> int:
+        """Scores specialist-domain intent using profile keywords and core terms."""
+        score = 0
+        skip_names = {"friendly_chatter", "default_assistant"}
+        for name, profile in self.profiles.items():
+            if name in skip_names:
+                continue
+            for keyword in profile.keywords:
+                kw = keyword.lower().strip()
+                if kw and re.search(rf"\b{re.escape(kw)}\b", prompt_lower):
+                    score += max(1, len(kw.split()))
+
+        # Core domain terms that are often omitted from profile keyword lists.
+        extra_domain_terms = (
+            "protein",
+            "pdb",
+            "alphafold",
+            "rfdiffusion",
+            "slurm",
+            "sbatch",
+            "sequence",
+            "docking",
+            "ligand",
+            "mutation",
+            "bioinformatics",
+            "citation",
+            "arxiv",
+            "paper",
+        )
+        for term in extra_domain_terms:
+            if term in prompt_lower:
+                score += 2
+        return score
 
     def profile_names(self) -> List[str]:
         """Returns all known persona names sorted alphabetically."""
@@ -189,6 +324,14 @@ class AgentRouter:
             if name.lower() == requested:
                 return name
         return None
+
+    def is_small_talk(self, prompt: str) -> bool:
+        """Public helper so callers can preserve conversational mode."""
+        return self.registry._looks_like_small_talk(prompt.lower())
+
+    def has_domain_signal(self, prompt: str) -> bool:
+        """Public helper to detect specialist-domain intent."""
+        return self.registry._has_domain_signal(prompt.lower())
 
     def load_persona_prompt(self, persona: str) -> str:
         """

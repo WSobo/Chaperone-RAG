@@ -33,6 +33,15 @@ srun -p "$PARTITION" \
     
     echo "Ensuring kagglehub is installed for weights..."
     pip install kagglehub -q
+    pip show langchain-chroma >/dev/null 2>&1 || pip install langchain-chroma -q
+
+    # Keep generation latency bounded for interactive use.
+    export CHAPERONE_MAX_NEW_TOKENS=1024
+    export CHAPERONE_MAX_GENERATION_TIME=60
+    export USER_AGENT="Chaperone-RAG/0.1 (+HPC interactive session)"
+
+    # Add this line to force Gemma to generate all chat responses
+    export CHAPERONE_CHAT_LLM=1
     
     echo "Starting Chaperone Agent..."
     python main.py

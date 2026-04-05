@@ -32,31 +32,43 @@ class GemmaEngine:
             web_search,
             generate_reproducibility_bundle
         ]
+        self.chat_state = {
+            "menu": None,
+            "last_topic": None,
+            "turn": 0,
+            "fact_idx": 0,
+        }
         
         # Initialize the router to dynamically swap prompts based on intent
         self.router = AgentRouter()
         
         try:
+            max_new_tokens = int(os.getenv("CHAPERONE_MAX_NEW_TOKENS", "256"))
+            max_generation_time = float(os.getenv("CHAPERONE_MAX_GENERATION_TIME", "20"))
+
             # Load tokenizer and model onto available GPUs
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, cache_dir=CACHE_DIR)
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_id,
                 device_map="auto",
-                torch_dtype=torch.bfloat16,
+                dtype=torch.bfloat16,
                 cache_dir=CACHE_DIR
             )
+
+            # Keep generation options in one place to avoid pipeline/config conflicts.
+            self.model.generation_config.max_new_tokens = max_new_tokens
+            self.model.generation_config.do_sample = True
+            self.model.generation_config.temperature = 0.1
+            self.model.generation_config.pad_token_id = self.tokenizer.eos_token_id
+            self.model.generation_config.max_time = max_generation_time
+            self.model.generation_config.max_length = None
             
             # Create standard HuggingFace pipeline for text generation
             pipe = pipeline(
                 "text-generation",
                 model=self.model,
                 tokenizer=self.tokenizer,
-                max_new_tokens=1024,
-                do_sample=True,
-                temperature=0.1, # Low temperature for accurate tool use reasoning
-                return_full_text=False,
-                pad_token_id=self.tokenizer.eos_token_id,
-                max_length=None # Avoid max_length and max_new_tokens conflict
+                return_full_text=False
             )
             
             # Wrap in LangChain's HuggingFacePipeline
@@ -74,7 +86,10 @@ class GemmaEngine:
                 
             base_llm = HuggingFacePipeline(pipeline=pipe)
             self.llm = ChatHuggingFace(llm=base_llm, tokenizer=self.tokenizer, model_id=self.model_id)
-            logger.info("Model pipeline loaded successfully.")
+            logger.info(
+                f"Model pipeline loaded successfully (max_new_tokens={max_new_tokens}, "
+                f"max_generation_time={max_generation_time}s)."
+            )
             
         except Exception as e:
             logger.warning(f"Failed to load full weights. Initializing Agent in MOCK mode. ERROR: {e}")
@@ -85,7 +100,67 @@ class GemmaEngine:
     def quick_chat_reply(self, prompt: str) -> str:
         """Fast local fallback for friendly chatter to keep latency low on large models."""
         text = prompt.strip().lower()
+        self.chat_state["turn"] += 1
 
+        bio_fun_facts = [
+            "Quick biology fun fact: octopuses edit their RNA in neurons, which may help them rapidly adapt brain function.",
+            "Quick biology fun fact: tardigrades survive extreme dehydration using proteins that protect cell structures.",
+            "Quick biology fun fact: some bacteria exchange DNA directly through tiny bridges in a process called conjugation.",
+            "Quick biology fun fact: your gut microbiome can influence metabolism and even aspects of mood signaling.",
+        ]
+
+        def next_fun_fact() -> str:
+            idx = self.chat_state["fact_idx"] % len(bio_fun_facts)
+            self.chat_state["fact_idx"] += 1
+            return bio_fun_facts[idx]
+
+        # Handle follow-up menu selections for short conversational turns.
+        if self.chat_state.get("menu") == "conversation_topics":
+            if re.fullmatch(r"\s*(1|1\)|1\.|one)\s*", text):
+                self.chat_state["last_topic"] = "sci_fi"
+                self.chat_state["menu"] = None
+                return "Nice pick. Sci-fi question: would you rather explore ocean planets, ringworlds, or Dyson spheres first?"
+            if re.fullmatch(r"\s*(2|2\)|2\.|two)\s*", text):
+                self.chat_state["last_topic"] = "productivity"
+                self.chat_state["menu"] = None
+                return "Productivity idea: try 25-minute focus sprints with a tiny written goal before each sprint."
+            if re.fullmatch(r"\s*(3|3\)|3\.|three)\s*", text):
+                self.chat_state["last_topic"] = "bio_fun_fact"
+                self.chat_state["menu"] = None
+                return next_fun_fact()
+            return "Pick 1, 2, or 3 and I will jump into that topic."
+
+        if re.search(r"\bhow are you\b|\bhow r you\b", text):
+            return "I am doing well. Thanks for asking. Want to keep chatting or explore a fun science topic?"
+        if re.fullmatch(r"\s*casual\s*[;.!?]*\s*", text):
+            return "Casual mode on. I am in. Want light banter, random trivia, or a silly would-you-rather?"
+        if re.fullmatch(r"\s*(1|1\)|1\.|chat)\s*", text):
+            return "Perfect, chat mode it is. What should we riff on first?"
+        if re.search(r"\bdo you like cats\b", text):
+            return (
+                "I do not have personal preferences, but cats are objectively elite: agile, curious, and dramatic in the best way. "
+                "Are you a cat person?"
+            )
+        if re.search(r"\bdo you like\s+([a-zA-Z][a-zA-Z\s-]{1,40})", text):
+            return "I do not have personal likes, but I can absolutely talk about that. Tell me your take and I will match your vibe."
+        if re.search(r"\b(hbu|wbu|how about you)\b", text):
+            return (
+                "I am doing well, thanks for asking. Want to keep it casual, or do a fun bio topic like "
+                "a weird protein fact?"
+            )
+        if re.search(r"\b(another one|another|again|one more)\b", text):
+            if self.chat_state.get("last_topic") == "bio_fun_fact":
+                return next_fun_fact()
+            return "Sure. Tell me what lane: casual chat, sci-fi, productivity, or biology fun facts."
+        if re.search(r"\b(that wasn'?t|you said|not a quick biology fun fact)\b", text):
+            self.chat_state["last_topic"] = "bio_fun_fact"
+            return f"Fair call. {next_fun_fact()}"
+        if re.search(r"\b(chat|chatting|conversation|pick a conversation)\b", text):
+            self.chat_state["menu"] = "conversation_topics"
+            return (
+                "Absolutely. Pick one and I will run with it: "
+                "1) sci-fi ideas, 2) productivity habits, 3) a quick biology fun fact."
+            )
         if re.search(r"\b(nice to meet you|great to meet you)\b", text):
             return (
                 "Really happy to meet you too. A local AI plus human collaboration is a powerful combo. "
@@ -104,10 +179,14 @@ class GemmaEngine:
             return "You are welcome. I am glad this is working better now."
         if re.search(r"\b(good night|gn|sleep)\b", text):
             return "Good night. Rest well and we can pick this back up anytime."
-        return (
-            "I am here with you. Tell me what you want to explore and I will adapt, whether it is casual chat "
-            "or a computational biology task."
-        )
+
+        fallback_responses = [
+            "I am here with you. We can keep it casual, or switch to a science topic whenever you want.",
+            "I am with you. Want a fun question, a quick fact, or just open chat?",
+            "Happy to keep chatting. Pick a lane: casual, productivity, sci-fi, or biology fun facts.",
+        ]
+        idx = self.chat_state["turn"] % len(fallback_responses)
+        return fallback_responses[idx]
 
     def _get_agent_executor(self, user_prompt: str, best_persona: str):
         """
@@ -123,6 +202,27 @@ class GemmaEngine:
         
         return agent
 
+    def _direct_chat(self, persona: str, prompt: str) -> str:
+        """Runs a direct model chat for non-tool responses."""
+        if not self.llm:
+            return "Mock Mode Direct Chat: I hear you."
+
+        try:
+            if persona == "default_assistant":
+                template_str = (
+                    "You are a helpful computational biology assistant speaking directly to a user. "
+                    "Respond in plain natural language and do not output internal reasoning markers "
+                    "like Thought, Action, Observation, or Final Answer labels."
+                )
+            else:
+                template_str = self.router.load_persona_prompt(persona)
+            sys_msg = SystemMessage(content=template_str)
+            response = self.llm.invoke([sys_msg, {"role": "user", "content": prompt}])
+            return response.content
+        except Exception as e:
+            logger.error(f"Direct text generation failed: {e}")
+            return f"An error occurred during chat: {e}"
+
     def chat(self, prompt: str, forced_persona: str | None = None) -> str:
         """
         Sends the augmented prompt through the LangChain Agent loop.
@@ -135,17 +235,18 @@ class GemmaEngine:
             if os.getenv("CHAPERONE_CHAT_LLM", "0") != "1":
                 logger.info("Using fast local chat responses (set CHAPERONE_CHAT_LLM=1 for model chat).")
                 return self.quick_chat_reply(prompt)
-            if not self.llm:
-                return "Mock Mode Direct Chat: Sure! I'm here to chat."
-            # Call the LLM directly without tools
-            try:
-                template_str = self.router.load_persona_prompt(best_persona)
-                sys_msg = SystemMessage(content=template_str)
-                response = self.llm.invoke([sys_msg, {"role": "user", "content": prompt}])
-                return response.content
-            except Exception as e:
-                logger.error(f"Direct text generation failed: {e}")
-                return f"An error occurred during chat: {e}"
+            return self._direct_chat(best_persona, prompt)
+
+        if best_persona == "default_assistant":
+            if self.router.is_small_talk(prompt):
+                logger.info("Default assistant detected small-talk; using fast local chat reply.")
+                return self.quick_chat_reply(prompt)
+            logger.info("Using fast default assistant fallback response (no tool loop).")
+            return (
+                "I can help with either casual chat or a specific biology workflow. "
+                "Tell me what you want next: 1) chat, 2) literature search, 3) PDB/structure analysis, "
+                "4) SLURM script help."
+            )
         
         executor = self._get_agent_executor(prompt, best_persona)
         if not self.model or not executor:

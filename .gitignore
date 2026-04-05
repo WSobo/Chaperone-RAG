@@ -23,5 +23,6 @@ model_cache/
 
 
 #references
-everything-claude-code
-OmicsAgent
+everything-claude-code/
+OmicsAgent/
+collection-claude-code-source-code/
