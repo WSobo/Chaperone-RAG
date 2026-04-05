@@ -9,9 +9,11 @@ cd gemma
 pip install -e .
 
 # Install JAX with NVIDIA GPU support and LangChain
-pip install "jax[cuda12]" langchain langchain-community beautifulsoup4 chromadb pyyaml sentence-transformers rich torchvision torch pypdf transformers accelerate langchain-huggingface duckduckgo-search arxiv biopython
+conda run -n chaperone_env pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118 -U
 
-pip install -U transformers torch accelerate
+conda run -n chaperone_env pip install "jax[cuda12]" langchain langchain-community beautifulsoup4 chromadb pyyaml sentence-transformers rich torchvision torch ddgs pypdf transformers accelerate langchain-huggingface duckduckgo-search arxiv biopython
+
+conda run -n chaperone_env pip install -U transformers torch accelerate
 
 
 then install the gemma model weights from kagglehub or huggingface

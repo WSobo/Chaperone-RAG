@@ -39,4 +39,3 @@ srun -p "$PARTITION" \
     
     echo "Session ended. Relinquishing GPU node."
 '
-'

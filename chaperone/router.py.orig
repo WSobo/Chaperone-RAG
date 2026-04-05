@@ -25,7 +25,7 @@ class AgentProfile:
         score = 0
         for keyword in self.keywords:
             kw = keyword.lower().strip()
-            if kw and re.search(rf"\b{re.escape(kw)}\b", prompt_lower):
+            if kw and kw in prompt_lower:
                 score += max(1, len(kw.split()))
         return score
 
@@ -158,10 +158,6 @@ class AgentProfileRegistry:
             return self.profiles["default_assistant"]
         return best_profile
 
-    def profile_names(self) -> List[str]:
-        """Returns all known persona names sorted alphabetically."""
-        return sorted(self.profiles.keys())
-
 
 class AgentRouter:
     """
@@ -178,31 +174,12 @@ class AgentRouter:
         logger.info(f"Router mapped intent to Persona: [bold cyan]{best_persona}[/bold cyan]")
         return best_persona
 
-    def available_personas(self) -> List[str]:
-        """Returns all available persona names."""
-        return self.registry.profile_names()
-
-    def resolve_persona_name(self, requested_name: str) -> str | None:
-        """Resolves persona names case-insensitively for CLI overrides."""
-        requested = requested_name.strip().lower()
-        for name in self.registry.profile_names():
-            if name.lower() == requested:
-                return name
-        return None
-
     def load_persona_prompt(self, persona: str) -> str:
         """
         Dynamically generates the System Prompt depending on the active Persona.
         Using the "everything-claude-code" methodology of targeted roles and checklists.
         """
         base_instructions = """Answer the following questions as best you can. You are an expert computational biologist interacting with a HPC environment.
-
-    Workflow requirements:
-    1. Plan before executing tools. State a concise plan in your Thought.
-    2. Prefer the minimum number of tool calls needed for confidence.
-    3. Validate assumptions and highlight uncertainty explicitly.
-    4. For code or scripts, prioritize safe, reproducible operations.
-
 You have access to the following tools:
 
 {tools}
@@ -225,10 +202,6 @@ Thought:{agent_scratchpad}"""
 
         profile = self.registry.profiles.get(persona, self.registry.profiles["default_assistant"])
         preamble = profile.prompt_preamble.strip()
-        
-        if persona == "friendly_chatter":
-            return preamble
-
         if not preamble:
             return base_instructions
 

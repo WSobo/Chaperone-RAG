@@ -1,0 +1,9 @@
+========================================================
+ 🚀 Requesting Interactive GPU Node for Chaperone-RAG 
+========================================================
+ Resources: Partition=gpu | GPUs=1 | Mem=64G | CPUs=8 | Time=02:00:00
+ Waiting for allocation... (Press Ctrl+C to cancel)
+srun: error: Step requested GRES but job doesn't have GRES
+srun: error: Unable to create step for job 32221342: Invalid generic resource (gres) specification
+/var/lib/slurm/slurmd/job32221342/slurm_script: line 42: unexpected EOF while looking for matching `''
+/var/lib/slurm/slurmd/job32221342/slurm_script: line 43: syntax error: unexpected end of file

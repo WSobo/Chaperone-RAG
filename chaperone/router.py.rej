@@ -1,0 +1,13 @@
+--- router.py
++++ router.py
+@@ -19,7 +19,9 @@
+     def keyword_score(self, user_prompt: str) -> int:
+         score = 0
+         for kw in self.keywords:
+-            if kw.lower() in user_prompt:
++            import re
++            pattern = r'\b' + re.escape(kw.lower()) + r'\b'
++            if re.search(pattern, user_prompt, re.IGNORECASE):
+                 score += 1
+         return score
+ 
