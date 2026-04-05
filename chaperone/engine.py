@@ -57,9 +57,14 @@ class GemmaEngine:
 
             # Identify correct end-of-turn tokens for Gemma format
             stop_token_ids = [self.tokenizer.eos_token_id]
-            for token in ["<end_of_turn>", "<start_of_turn>"]:
-                if token in self.tokenizer.vocab:
-                    stop_token_ids.append(self.tokenizer.convert_tokens_to_ids(token))
+            
+            # The t.vocab dict doesn't actually contain Gemma 4 special tokens; 
+            # converting special tokens directly via convert_tokens_to_ids is the correct approach
+            for token in ["<end_of_turn>", "<start_of_turn>", "<eos>"]:
+                cid = self.tokenizer.convert_tokens_to_ids(token)
+                # Some versions of transformers return an unk_token id if it fails to find the token
+                if cid and cid != self.tokenizer.unk_token_id and cid not in stop_token_ids:
+                    stop_token_ids.append(cid)
 
             # Keep generation options in one place to avoid pipeline/config conflicts.
             self.model.generation_config.max_new_tokens = max_new_tokens
