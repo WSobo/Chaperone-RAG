@@ -20,3 +20,8 @@ faiss_index/
 #LLM
 gemma/
 model_cache/
+
+
+#references
+everything-claude-code
+OmicsAgent
