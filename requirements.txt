@@ -14,4 +14,4 @@ pip install "jax[cuda12]" langchain langchain-community beautifulsoup4 chromadb 
 pip install -U transformers torch accelerate
 
 
-then install the model weights from kagglehub or huggingface
+then install the gemma model weights from kagglehub or huggingface
