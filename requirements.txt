@@ -9,7 +9,7 @@ cd gemma
 pip install -e .
 
 # Install JAX with NVIDIA GPU support and LangChain
-pip install "jax[cuda12]" langchain langchain-community beautifulsoup4 chromadb pyyaml sentence-transformers rich torchvision torch pypdf transformers accelerate langchain-huggingface
+pip install "jax[cuda12]" langchain langchain-community beautifulsoup4 chromadb pyyaml sentence-transformers rich torchvision torch pypdf transformers accelerate langchain-huggingface duckduckgo-search arxiv biopython
 
 pip install -U transformers torch accelerate
 

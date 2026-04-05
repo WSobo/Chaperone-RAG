@@ -8,6 +8,8 @@ from langchain_core.prompts import PromptTemplate
 from chaperone.utils.logger import logger
 from chaperone.tools.rcsb_fetcher import fetch_pdb_metadata, download_pdb_file
 from chaperone.tools.slurm_runner import submit_job, create_slurm_script
+from chaperone.tools.sandbox import execute_python_script
+from chaperone.tools.literature import search_literature, web_search
 
 class GemmaEngine:
     def __init__(self):
@@ -17,7 +19,15 @@ class GemmaEngine:
         CACHE_DIR = "/private/groups/yehlab/wsobolew/02_projects/computational/Chaperone-RAG/model_cache"
         os.environ["HF_HOME"] = CACHE_DIR
         
-        self.tools = [fetch_pdb_metadata, download_pdb_file, submit_job, create_slurm_script]
+        self.tools = [
+            fetch_pdb_metadata, 
+            download_pdb_file, 
+            submit_job, 
+            create_slurm_script,
+            execute_python_script,
+            search_literature,
+            web_search
+        ]
         
         try:
             # Load tokenizer and model onto available GPUs
