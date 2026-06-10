@@ -37,6 +37,9 @@ uv run chaperone ingest https://…          # URLs are auto-detected (no flag n
 uv run chaperone ask "How does RFdiffusion condition on a binding hotspot?"
 uv run chaperone chat                      # interactive REPL
 uv run chaperone eval                      # evaluation harness against the golden set
+uv run chaperone skills                    # list runnable tools (manifests)
+uv run chaperone run <tool> -p k=v         # render a tool's SLURM job (dry-run); --submit to queue + track
+uv run chaperone runs                      # list recorded runs (provenance)
 python main.py chat                        # back-compat shim → the same CLI
 ```
 
@@ -89,7 +92,9 @@ query:   question
 
 **`tools/` — typed bio tools.** LangChain tools with Pydantic argument schemas: `rcsb` (PDB metadata/coordinate download), `literature` (arXiv / web search), `slurm` (write + `sbatch` HPC jobs), `sandbox` (timeboxed Python execution for on-the-fly BioPython work). The sandbox runs untrusted generated code — keep it constrained (timeout, workspace dir) and treat it as a security boundary.
 
-**`eval/` — measurement.** `golden_set.py` holds protein-design Q/A/ground-truth-context fixtures; `ragas_eval.py` scores faithfulness, answer relevancy, and context precision/recall. Runs against the mock backend in CI so retrieval regressions are caught without a GPU.
+**`eval/` — measurement.** `golden_set.py` holds protein-design Q/A/ground-truth-context fixtures; `harness.py` scores deterministic retrieval metrics (hit-rate, MRR, grounded-rate) always, plus optional RAGAS generation metrics. Runs against the mock backend in CI so retrieval regressions are caught without a GPU.
+
+**`skills/` + `jobs/` — running tools, not just answering about them.** A **tool manifest** (`configs/skills/*.yaml`; schema in `skills/manifest.py`) describes how to run one tool on the cluster: typed `inputs`, `env` (conda/modules), `resources`, a `command` template, and output globs. `skills/render.py` turns a manifest + validated params into a SLURM script (params are coerced through a Pydantic model built from `inputs`). `jobs/` runs it: a `Scheduler` Protocol (`SlurmScheduler`, plus a **`LocalScheduler` mock** that runs the script as a subprocess so the whole lifecycle is testable on CPU — the same pattern as `MockLLM`), a `JobRunner` (prepare → submit → poll → collect outputs), and a `RunStore` that writes one JSON provenance record per run under `data/runs/`. This is the action layer; the LLM-driven planner that *picks* a tool and fills params from intent is intentionally not built yet (it needs a real LLM) but slots on top of this. **Add a runnable tool by writing a manifest — copy `configs/skills/TEMPLATE.yaml`, no code.**
 
 **`utils/logger.py`** — shared `rich` logger; import `logger` from here rather than using `print`.
 
@@ -100,7 +105,8 @@ query:   question
 - **Boundaries are models.** A function that crosses a pipeline stage takes and returns a `schemas.py` model, not a dict or tuple.
 - **LangChain composition is LCEL.** Prefer `Runnable` pipes (`|`) over imperative glue; use LangGraph only for the stateful agent loop.
 - **The mock backend must stay first-class.** Every feature has to work (and be tested) under `MockLLM` on CPU. If a change only works with real Gemma weights, it's not done.
-- **Add a tool:** define its Pydantic args + `@tool` in `tools/`, then register it in the agent's tool list — that's the only wiring point.
+- **Add an agent tool:** define its Pydantic args + `@tool` in `tools/`, then register it in the agent's tool list — that's the only wiring point.
+- **Add a runnable cluster tool** (AlphaFold, LigandMPNN, …): write a manifest in `configs/skills/` (copy `TEMPLATE.yaml`); `chaperone run`/`skills` pick it up automatically. No Python. Job execution defaults to the `local` scheduler (subprocess) — set `CHAPERONE_JOBS__SCHEDULER=slurm` on the cluster.
 - Runtime artifacts (`data/`, vector DB, `model_cache/`, the cloned `gemma/`, weights) are gitignored and created on demand.
 
 ## Status

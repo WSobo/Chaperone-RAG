@@ -35,6 +35,8 @@ class PathSettings(BaseModel):
     sandbox_dir: Path = Path("data/sandbox")
     pdb_dir: Path = Path("data/pdb_files")
     scripts_dir: Path = Path("scripts")
+    skills_dir: Path = Path("configs/skills")  # tool manifests (*.yaml)
+    runs_dir: Path = Path("data/runs")  # job run records / provenance
     # Was hard-coded to a cluster path in two modules; now one configurable field.
     model_cache: Path = Path("model_cache")
 
@@ -65,6 +67,12 @@ class RetrievalSettings(BaseModel):
     use_hyde: bool = False
 
 
+class JobsSettings(BaseModel):
+    # "local" runs job scripts as subprocesses (CPU/dev/CI); "slurm" submits via sbatch.
+    scheduler: Literal["slurm", "local"] = "local"
+    poll_interval: float = Field(default=2.0, gt=0, description="Seconds between status polls.")
+
+
 class Settings(BaseSettings):
     """Root settings tree. Construct via :func:`get_settings`."""
 
@@ -79,6 +87,7 @@ class Settings(BaseSettings):
     llm: LLMSettings = Field(default_factory=LLMSettings)
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
+    jobs: JobsSettings = Field(default_factory=JobsSettings)
 
     @classmethod
     def settings_customise_sources(
@@ -107,6 +116,7 @@ class Settings(BaseSettings):
             self.paths.sandbox_dir,
             self.paths.pdb_dir,
             self.paths.scripts_dir,
+            self.paths.runs_dir,
         ):
             p.mkdir(parents=True, exist_ok=True)
 

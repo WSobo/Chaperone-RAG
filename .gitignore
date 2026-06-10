@@ -13,6 +13,7 @@ faiss_index/
 data/chroma_db/
 data/sandbox/
 data/pdb_files/
+data/runs/
 .pytest_cache/
 *.egg-info/
 

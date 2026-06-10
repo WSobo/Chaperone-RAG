@@ -1,0 +1,29 @@
+# A minimal, self-contained example manifest — NOT a real scientific tool.
+# It needs no GPU, conda, or modules, so it runs end-to-end under the "local"
+# scheduler (and in the test suite). Use it to see the run lifecycle work, and
+# TEMPLATE.yaml as the starting point for real tools.
+
+name: echo-demo
+description: Write a message to result.txt — demonstrates the run lifecycle without a GPU.
+version: "1.0"
+
+inputs:
+  message:
+    type: str
+    required: true
+    help: Text to write into the output file.
+
+env: {}  # no conda/modules → the rendered script runs anywhere with bash
+
+resources:
+  partition: debug
+  gres: null      # CPU-only: no --gres line
+  cpus: 1
+  mem: 1G
+  time: "00:05:00"
+
+command: |
+  echo "{message}" > {out_dir}/result.txt
+
+outputs:
+  result: "{out_dir}/result.txt"

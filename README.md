@@ -107,6 +107,29 @@ and reports:
 - **Generation** (optional, needs `.[eval]` + an evaluator LLM): RAGAS faithfulness,
   answer relevancy, context precision/recall.
 
+## Running tools (AlphaFold, LigandMPNN, …)
+
+Beyond answering *about* methods, Chaperone can turn a request into a correct,
+tracked cluster job. A **tool manifest** (`configs/skills/*.yaml`) describes one
+tool's typed inputs, environment, resources, command, and outputs — add a tool by
+writing a manifest, not code (copy `configs/skills/TEMPLATE.yaml`).
+
+```bash
+uv run chaperone skills                                  # list available tools
+uv run chaperone run echo-demo -p message="hi"           # dry-run: render the SLURM script
+uv run chaperone run echo-demo -p message="hi" --submit  # queue + monitor + record
+uv run chaperone runs                                    # provenance: every recorded run
+```
+
+Jobs run through a `Scheduler` abstraction: `SlurmScheduler` on the cluster
+(`CHAPERONE_JOBS__SCHEDULER=slurm`), or a `LocalScheduler` (default) that runs the
+script as a subprocess — so the full submit → monitor → collect lifecycle works on
+CPU with no SLURM. Each run writes a JSON record (params, script, job id, state,
+outputs) under `data/runs/`.
+
+> The layer that *chooses* a tool and fills its parameters from a natural-language
+> request needs a real LLM and is intentionally not built yet — it sits on top of this.
+
 ## Project layout
 
 ```
@@ -118,8 +141,11 @@ chaperone/
   rag/             prompts · chain (LCEL → cited Answer)
   agent/           graph (LangGraph corrective-RAG)
   tools/           rcsb · literature · slurm · sandbox  (typed @tool)
+  skills/          manifest · registry · render   (tool-manifest template)
+  jobs/            scheduler (slurm + local mock) · lifecycle · store
   eval/            golden_set · harness (RAGAS + retrieval metrics)
-tests/             schemas · settings · mock_llm · rag_pipeline (offline e2e)
+configs/skills/    TEMPLATE.yaml (copy-me) · example-echo.yaml
+tests/             schemas · settings · mock_llm · skills · jobs · rag_pipeline (offline e2e)
 ```
 
 ## Testing
