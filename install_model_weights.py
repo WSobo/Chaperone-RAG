@@ -1,18 +1,29 @@
+"""Pre-fetch the configured LLM weights into the model cache (run on a GPU node).
+
+Optional convenience — the Gemma backend also downloads on first use. The model id
+and cache directory come from settings (CHAPERONE_LLM__MODEL_ID / paths.model_cache),
+so there are no hard-coded paths here.
+
+Note: Gemma checkpoints are gated on Hugging Face; run `huggingface-cli login` first.
+"""
+
+from __future__ import annotations
+
 import os
-import kagglehub
-import torch
-from transformers import AutoProcessor, AutoModelForCausalLM
 
-# Set the kagglehub cache directory to a local folder in the project instead of the home directory
-CACHE_DIR = "/private/groups/yehlab/wsobolew/02_projects/computational/Chaperone-RAG/model_cache"
-os.environ["KAGGLEHUB_CACHE"] = CACHE_DIR
 
-MODEL_PATH = kagglehub.model_download("google/gemma-4/transformers/gemma-4-26b-a4b")
+def main() -> None:
+    from chaperone.settings import get_settings
 
-# Load model
-processor = AutoProcessor.from_pretrained(MODEL_PATH)
-model = AutoModelForCausalLM.from_pretrained(
-    MODEL_PATH,
-    dtype=torch.bfloat16,
-    device_map="auto"
-)
+    settings = get_settings()
+    cache = str(settings.paths.model_cache)
+    os.environ.setdefault("HF_HOME", cache)
+
+    from huggingface_hub import snapshot_download
+
+    path = snapshot_download(settings.llm.model_id, cache_dir=cache)
+    print(f"Cached {settings.llm.model_id} -> {path}")
+
+
+if __name__ == "__main__":
+    main()

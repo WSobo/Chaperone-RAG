@@ -1,0 +1,29 @@
+# Default Chaperone-RAG configuration.
+# Layering: built-in defaults  <  this file  <  CHAPERONE_* environment variables.
+# Env example: CHAPERONE_LLM__BACKEND=gemma  CHAPERONE_RETRIEVAL__RERANK_TOP_N=6
+
+llm:
+  # "mock" runs the whole pipeline on CPU with deterministic, citation-aware output.
+  # Switch to "gemma" on a GPU node (run_chaperone.sh sets this for you).
+  backend: mock
+  # A real, currently-downloadable checkpoint. Point at a newer Gemma when available.
+  model_id: google/gemma-2-9b-it
+  max_new_tokens: 1024
+  temperature: 0.1
+
+embedding:
+  model_name: BAAI/bge-small-en-v1.5
+  device: cpu
+
+retrieval:
+  collection_name: chaperone_docs
+  chunk_size: 1000
+  chunk_overlap: 200
+  top_k: 12              # candidates pulled by hybrid search
+  rerank_top_n: 4        # kept after cross-encoder rerank
+  dense_weight: 0.5
+  bm25_weight: 0.5
+  use_reranker: true
+  reranker_model: BAAI/bge-reranker-base
+  use_multi_query: true  # expand the query into paraphrases before retrieval
+  use_hyde: false        # hypothetical-document embedding (extra LLM call)

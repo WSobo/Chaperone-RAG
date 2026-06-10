@@ -1,17 +1,12 @@
-
-conda create -n chaperone_env python=3.12 -y
-conda activate chaperone_env
-
-# Install the Latest Build of Gemma4 from the GitHub Repository
-# may be able to pip install in the future, but not currently since its day 2 of the public release of Gemma4
-git clone https://github.com/google-deepmind/gemma.git
-cd gemma
-pip install -e .
-
-# Install JAX with NVIDIA GPU support and LangChain
-pip install "jax[cuda12]" langchain langchain-community beautifulsoup4 chromadb pyyaml sentence-transformers rich torchvision torch pypdf transformers accelerate langchain-huggingface duckduckgo-search arxiv biopython
-
-pip install -U transformers torch accelerate
-
-
-then install the model weights from kagglehub or huggingface
+# Dependencies are declared in pyproject.toml (the source of truth).
+# Preferred workflow is uv: `uv sync` (see README / CLAUDE.md). This file is a
+# plain-pip fallback for tooling that expects requirements.txt.
+#
+#   pip install -e .            # core: CPU retrieval pipeline + mock LLM (runs anywhere)
+#   pip install -e ".[gpu]"     # + torch/transformers/accelerate for the Gemma backend
+#   pip install -e ".[eval]"    # + ragas/datasets for the evaluation harness
+#   pip install -e ".[dev]"     # + pytest/ruff/mypy
+#
+# On the HPC cluster, scripts/setup_env.sh installs uv and syncs the GPU env (it also
+# compiles google-deepmind/gemma from source until that's pip-installable).
+-e .

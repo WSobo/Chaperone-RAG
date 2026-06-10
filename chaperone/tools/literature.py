@@ -1,24 +1,50 @@
-from langchain_community.tools.arxiv.tool import ArxivQueryRun
-from langchain_community.tools.ddg_search.tool import DuckDuckGoSearchRun
+"""External knowledge tools: arXiv and web search.
+
+Calls the ``arxiv`` and ``ddgs`` libraries directly (no langchain-community tool
+wrappers). The clients are imported lazily inside each tool so importing this module
+stays cheap and free of network/validation side effects.
+"""
+
+from __future__ import annotations
+
 from langchain_core.tools import tool
+from pydantic import BaseModel, Field
 
-# Create default instances of community tools
-arxiv_searcher = ArxivQueryRun()
-ddg_searcher = DuckDuckGoSearchRun()
+_MAX_RESULTS = 5
+_SUMMARY_CHARS = 400
 
-@tool
+
+class QueryArgs(BaseModel):
+    query: str = Field(description="Free-text search query.")
+
+
+@tool(args_schema=QueryArgs)
 def search_literature(query: str) -> str:
-    """
-    Search ArXiv for preprints related to biology, protein engineering, deep learning, etc.
-    Use this to look up specific papers or recent advancements not in your local RAG database.
-    """
-    return arxiv_searcher.run(query)
+    """Search arXiv for preprints (protein engineering, ML, structural biology).
 
-@tool
+    Use for specific papers or advances not in the local corpus.
+    """
+    import arxiv
+
+    search = arxiv.Search(query=query, max_results=_MAX_RESULTS)
+    blocks: list[str] = []
+    for r in arxiv.Client().results(search):
+        authors = ", ".join(a.name for a in r.authors[:3])
+        year = r.published.year if r.published else "n.d."
+        blocks.append(f"{r.title} ({year}) — {authors}\n{r.summary.strip()[:_SUMMARY_CHARS]}\n{r.entry_id}")
+    return "\n\n".join(blocks) if blocks else "No arXiv results."
+
+
+@tool(args_schema=QueryArgs)
 def web_search(query: str) -> str:
+    """Web search via DuckDuckGo for docs, tutorials, or tool syntax.
+
+    Use to look up an external API or check an online biological database.
     """
-    Query the internet via DuckDuckGo for documentation, tutorials, or open source repositories.
-    Use this when you need to research an external API, look up RFDiffusion or ProteinMPNN syntax, 
-    or check biological databases online.
-    """
-    return ddg_searcher.run(query)
+    from ddgs import DDGS
+
+    hits = DDGS().text(query, max_results=_MAX_RESULTS)
+    blocks = [
+        f"{h.get('title', '')}\n{h.get('body', '')}\n{h.get('href', '')}".strip() for h in hits
+    ]
+    return "\n\n".join(blocks) if blocks else "No web results."

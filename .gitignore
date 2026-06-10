@@ -1,11 +1,20 @@
 # Environments
 venv/
+.venv/
 .env
 __pycache__/
+# Note: uv.lock IS committed (reproducible installs) — do not ignore it.
 
 # Vector Databases
 chroma_db/
 faiss_index/
+
+# Runtime artifacts
+data/chroma_db/
+data/sandbox/
+data/pdb_files/
+.pytest_cache/
+*.egg-info/
 
 # Model Weights (if you download any locally)
 *.bin

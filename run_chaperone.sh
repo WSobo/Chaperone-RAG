@@ -25,18 +25,21 @@ srun -p "$PARTITION" \
     echo " ✅ Node allocated: $(hostname)"
     echo "========================================================"
     
-    # Initialize conda in this subshell
-    eval "$(conda shell.bash hook)" 2>/dev/null || source activate chaperone_env
-    
-    echo "Environment: Activating chaperone_env..."
-    conda activate chaperone_env
-    
-    echo "Ensuring kagglehub is installed for weights..."
-    pip install kagglehub -q
-    
-    echo "Starting Chaperone Agent..."
-    python main.py
-    
+    # Activate the uv-managed project venv (created by scripts/setup_env.sh).
+    if [ -f .venv/bin/activate ]; then
+        echo "Environment: activating uv .venv..."
+        source .venv/bin/activate
+    else
+        echo "No .venv found — run: bash scripts/setup_env.sh" >&2
+        exit 1
+    fi
+
+    # Run the local Gemma backend on the allocated GPU.
+    export CHAPERONE_LLM__BACKEND=gemma
+    export CHAPERONE_EMBEDDING__DEVICE=cuda
+
+    echo "Starting Chaperone (backend=$CHAPERONE_LLM__BACKEND)..."
+    python main.py chat
+
     echo "Session ended. Relinquishing GPU node."
-'
 '
