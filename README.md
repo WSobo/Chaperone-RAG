@@ -20,6 +20,7 @@ anywhere.
 | **Typed end-to-end** | Pydantic v2 models are the contract between every stage (`schemas.py`). The LLM's output is *parsed into a validated object*, never passed around as a string. |
 | **Runs without a GPU** | Generation is a pluggable backend behind a `Protocol`. `MockLLM` does extractive, citation-aware synthesis on CPU; `GemmaLLM` swaps in on a GPU node with no other change. |
 | **Evaluated, not vibes** | A RAGAS + deterministic-retrieval harness scores the pipeline against a labeled golden set. |
+| **Minimal, first-party deps** | No deprecated `langchain-community`: PDF/web ingestion, BM25, and the arXiv/web tools call `pypdf`, `BeautifulSoup`, `rank_bm25`, `arxiv`, and `ddgs` directly, and hybrid fusion is hand-rolled reciprocal-rank fusion — fewer moving parts, and the ranking logic is inspectable. |
 
 ## Architecture
 
