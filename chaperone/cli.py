@@ -91,7 +91,99 @@ def info() -> None:
     console.print(table)
 
 
+@app.command()
+def skills() -> None:
+    """List available tool manifests (configs/skills/*.yaml)."""
+    from chaperone.app import build_registry
+
+    manifests = build_registry().all()
+    if not manifests:
+        console.print(
+            "[dim]No tool manifests found. Copy configs/skills/TEMPLATE.yaml to add one.[/dim]"
+        )
+        return
+    table = Table(title="Tools")
+    table.add_column("name", style="cyan")
+    table.add_column("version")
+    table.add_column("description")
+    for m in manifests:
+        table.add_row(m.name, m.version, m.description)
+    console.print(table)
+
+
+@app.command()
+def run(
+    tool: str = typer.Argument(..., help="Tool name (see `chaperone skills`)."),
+    param: list[str] = typer.Option([], "--param", "-p", help="Tool parameter key=value (repeatable)."),
+    submit: bool = typer.Option(False, "--submit", help="Queue the job (default: dry-run / render only)."),
+    watch: bool = typer.Option(True, "--watch/--no-watch", help="Monitor until the job finishes."),
+) -> None:
+    """Render — and optionally submit + track — a tool run from its manifest."""
+    from pydantic import ValidationError
+
+    from chaperone.app import build_job_runner, build_registry
+
+    settings = get_settings()
+    try:
+        manifest = build_registry(settings).get(tool)
+    except KeyError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from e
+
+    runner = build_job_runner(settings)
+    try:
+        if not submit:
+            rendered = runner.render(manifest, _parse_params(param))
+            console.print(Panel(rendered.script, title=f"Dry run · {tool} (not submitted)", expand=False))
+            console.print("[dim]Add --submit to queue this job.[/dim]")
+            return
+        result = runner.run(manifest, _parse_params(param), watch=watch)
+    except ValidationError as e:
+        console.print(f"[red]Invalid parameters for {tool}:[/red]\n{e}")
+        raise typer.Exit(1) from e
+    _render_run(result.record)
+
+
+@app.command()
+def runs(limit: int = typer.Option(20, help="Show the most recent N runs.")) -> None:
+    """List recorded tool runs (provenance)."""
+    from chaperone.jobs import RunStore
+
+    records = RunStore(get_settings().paths.runs_dir).list()[:limit]
+    if not records:
+        console.print("[dim]No runs yet.[/dim]")
+        return
+    table = Table(title="Runs")
+    for col in ("run_id", "tool", "state", "created"):
+        table.add_column(col)
+    for r in records:
+        table.add_row(r.run_id, r.tool, r.state.value, r.created_at)
+    console.print(table)
+
+
 # --- helpers -----------------------------------------------------------------
+
+
+def _parse_params(items: list[str]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for item in items:
+        if "=" not in item:
+            raise typer.BadParameter(f"Expected key=value, got: {item}")
+        key, value = item.split("=", 1)
+        out[key.strip()] = value
+    return out
+
+
+def _render_run(record) -> None:  # noqa: ANN001 - JobRecord
+    color = "green" if record.succeeded else "yellow"
+    lines = [
+        f"state: [{color}]{record.state.value}[/{color}]",
+        f"job:   {record.job_id}",
+        f"out:   {record.out_dir}",
+    ]
+    for name, files in record.outputs.items():
+        lines.append(f"{name}: {len(files)} file(s)")
+    console.print(Panel("\n".join(lines), title=f"Run {record.run_id} · {record.tool}", expand=False))
 
 
 def _engine(agent: bool):  # noqa: ANN202 - RAGChain | ChaperoneAgent, both have .invoke

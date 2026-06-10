@@ -1,0 +1,79 @@
+# Tool manifest TEMPLATE — copy this file to configs/skills/<your-tool>.yaml and edit.
+# A manifest teaches Chaperone how to run ONE tool on THIS cluster. No code needed:
+# `chaperone run <name> -p key=value` validates params, renders a SLURM script, and
+# (with --submit) queues + tracks it. Files named TEMPLATE.yaml are ignored by the loader.
+#
+# Validate your manifest without submitting anything:
+#   chaperone run <name> -p ... --dry-run     # prints the rendered script
+
+name: my-tool                  # unique tool id (used on the CLI)
+description: One-line summary of what the tool does.
+version: "1.0"                 # tool/manifest version (recorded in run provenance)
+
+# --- inputs -----------------------------------------------------------------
+# Each input becomes a validated, typed CLI parameter. Types: str | int | float | bool | path.
+inputs:
+  input_path:
+    type: path
+    required: true
+    help: Path to the input file (e.g. a PDB or FASTA).
+  num_seqs:
+    type: int
+    required: false
+    default: 8
+    help: How many sequences/designs to generate.
+  temperature:
+    type: float
+    default: 0.1
+
+# --- environment ------------------------------------------------------------
+# How to make the tool available on a compute node. Omit anything you do not need.
+env:
+  conda_env: my-tool-env       # `conda activate my-tool-env`
+  module_load: [cuda/12.1]     # `module load cuda/12.1`
+  env:                         # exported before the command runs
+    OMP_NUM_THREADS: "8"
+  workdir: /sw/my-tool         # `cd` here before running (e.g. the tool's repo)
+
+# --- resources --------------------------------------------------------------
+resources:
+  partition: gpu
+  gres: "gpu:1"                # set to null for a CPU-only tool (omits --gres)
+  cpus: 8
+  mem: 32G
+  time: "01:00:00"
+
+# --- command ----------------------------------------------------------------
+# Shell command template. Reference inputs as {input_name} and the per-run output
+# directory as {out_dir}. Literal shell braces like ${VAR} are left untouched.
+command: |
+  python run.py --in {input_path} --out {out_dir} \
+    --num {num_seqs} --temperature {temperature}
+
+# --- outputs ----------------------------------------------------------------
+# Named globs collected after the job finishes (recorded in the run record).
+outputs:
+  designs: "{out_dir}/seqs/*.fa"
+  structures: "{out_dir}/*.pdb"
+
+# ============================================================================
+# Realistic example (LigandMPNN) — uncomment + adapt to your install:
+#
+# name: ligandmpnn
+# description: Design sequences for a protein backbone given a bound ligand.
+# version: "1.0"
+# inputs:
+#   pdb_path:       {type: path,  required: true,  help: Input backbone PDB.}
+#   fixed_residues: {type: str,   required: false, help: e.g. "A10 A11 A12".}
+#   num_seqs:       {type: int,   default: 8}
+#   temperature:    {type: float, default: 0.1}
+# env:
+#   conda_env: ligandmpnn
+#   workdir: /sw/LigandMPNN
+# resources: {partition: gpu, gres: "gpu:1", cpus: 8, mem: 32G, time: "01:00:00"}
+# command: |
+#   python run.py --model_type ligand_mpnn --pdb_path {pdb_path} \
+#     --out_folder {out_dir} --number_of_batches {num_seqs} --temperature {temperature}
+# outputs:
+#   sequences: "{out_dir}/seqs/*.fa"
+#   packed: "{out_dir}/packed/*.pdb"
